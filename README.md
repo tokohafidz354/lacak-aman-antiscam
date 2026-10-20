@@ -1,27 +1,55 @@
 # Lacak Aman Anti-Scam
 
-Web/PWA untuk membantu pemeriksaan awal penipuan online, pengelolaan kasus dan bukti, serta berbagi lokasi GPS berbasis persetujuan.
+Web/PWA berbahasa Indonesia untuk pencatatan pemeriksaan awal nomor mencurigakan, pengelolaan kasus dan bukti, serta pembacaan GPS perangkat setelah persetujuan pengguna.
 
-## Prinsip penting
+## Status implementasi awal
 
-- Nomor HP saja tidak dapat digunakan aplikasi ini untuk menentukan GPS perangkat atau status terakhir aktif WhatsApp.
-- Pemeriksaan sumber resmi pada MVP dicatat secara manual; belum ada integrasi API otomatis.
-- Lokasi hanya dibaca pada perangkat yang menjalankan aplikasi setelah pengguna menekan tombol mulai dan menyetujui izin lokasi browser.
-- Data yang belum terhubung ke backend tidak akan ditampilkan sebagai data nyata.
+- Dashboard dan navigasi lima bagian.
+- Pencatatan nomor HP dalam format internasional +62, dengan status pemeriksaan manual.
+- Pengelolaan kasus, status kasus, catatan kronologi, lampiran sementara pada sesi browser, hash SHA-256 jika API kriptografi tersedia, dan ekspor ringkasan TXT.
+- Pembacaan koordinat perangkat saat ini setelah persetujuan eksplisit dan izin browser.
+- PWA shell dasar dengan manifest dan service worker.
 
-## Menjalankan proyek
+## Menjalankan secara lokal
+
+Membutuhkan Node.js dan npm.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Status awal
+Build produksi:
 
-UI MVP dan alur sisi-klien akan dibangun terlebih dahulu. Backend autentikasi, database, private storage, serta kebijakan akses perlu dikonfigurasi dan diuji sebelum digunakan untuk menyimpan data sensitif secara produksi.
+```bash
+npm run build
+npm run preview
+```
+
+## Batasan keamanan dan data
+
+Versi pertama ini **belum terhubung ke backend**. Data nomor dan metadata kasus disimpan di penyimpanan lokal browser. Data tidak tersinkronisasi antarperangkat, dapat hilang jika data browser dibersihkan, dan tidak cocok untuk menyimpan bukti sensitif jangka panjang sebelum backend aman disiapkan.
+
+File bukti dibaca dalam sesi browser dan dibuatkan URL sementara untuk pratinjau; konten file tidak diunggah ke server. Ekspor kasus masih berupa TXT, bukan PDF.
+
+Lokasi GPS dibaca satu kali dari browser perangkat yang sedang dipakai. Koordinat tidak dikirim ke server, tidak ditampilkan ke penerima lain, dan bukan cara melacak nomor HP. Status waktu kedaluwarsa hanya penanda UI dan bukan mekanisme berbagi lokasi jaringan.
+
+API resmi untuk memeriksa nomor/rekening belum dikonfigurasi. Hasil harus diperiksa manual melalui sumber resmi di bawah. Tidak ditemukannya laporan pada suatu sumber bukan bukti bahwa nomor aman.
 
 ## Sumber resmi
 
-- https://aduannomor.id/
-- https://cekrekening.id/
-- https://iasc.ojk.go.id/
+- AduanNomor: https://aduannomor.id/
+- CekRekening: https://cekrekening.id/
+- Indonesia Anti-Scam Centre: https://iasc.ojk.go.id/
+- Pusat Bantuan WhatsApp: https://faq.whatsapp.com/
+
+## Tahap berikutnya sebelum produksi
+
+1. Konfigurasikan Supabase Auth dan PostgreSQL.
+2. Tambahkan skema, Row Level Security (RLS), policy kepemilikan kasus, dan audit log.
+3. Buat private Storage bucket dan validasi akses signed URL.
+4. Pisahkan sesi GPS, daftar penerima yang berizin, kedaluwarsa sesi di server, serta kebijakan retensi lokasi.
+5. Tambahkan pengujian komponen, validasi, dan alur error end-to-end.
+6. Verifikasi workflow build pada GitHub Actions sebelum rilis.
+
+Jangan menambahkan kredensial atau service_role key ke kode frontend.
