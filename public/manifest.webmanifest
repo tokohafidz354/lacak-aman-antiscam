@@ -1,0 +1,10 @@
+{
+  "name": "Lacak Aman Anti-Scam",
+  "short_name": "Lacak Aman",
+  "lang": "id-ID",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0b1730",
+  "description": "Pemeriksaan awal nomor mencurigakan, manajemen bukti, dan berbagi lokasi GPS berizin."
+}
