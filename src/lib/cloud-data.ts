@@ -41,7 +41,7 @@ export async function loadCloudData(): Promise<{ numbers: CloudNumber[]; cases: 
   const db = client();
   const [caseResult, phoneResult, checkResult, evidenceResult] = await Promise.all([
     db.from("cases").select("*").order("created_at", { ascending: false }),
-    db.from("phone_subjects").select("*").is("case_id", null).order("created_at", { ascending: false }),
+    db.from("phone_subjects").select("*").order("created_at", { ascending: false }),
     db.from("number_checks").select("*").order("checked_at", { ascending: false }),
     db.from("evidence_files").select("*").order("uploaded_at", { ascending: false }),
   ]);
@@ -68,7 +68,7 @@ export async function loadCloudData(): Promise<{ numbers: CloudNumber[]; cases: 
     };
   }));
 
-  const numbers: CloudNumber[] = phoneRows.map((row) => {
+  const numbers: CloudNumber[] = phoneRows.filter((row) => !row.case_id).map((row) => {
     const check = checkRows.find((item) => item.phone_subject_id === row.id);
     return {
       id: row.id,
@@ -82,7 +82,6 @@ export async function loadCloudData(): Promise<{ numbers: CloudNumber[]; cases: 
   });
 
   const cases: CloudCase[] = caseRows.map((row) => {
-    const related = (db as any).__not_used;
     const casePhone = (phoneResult.data ?? []).find((phoneRow) => phoneRow.case_id === row.id);
     return {
       id: row.id,
