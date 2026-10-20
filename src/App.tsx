@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "./lib/supabase";
 import { loadCloudData, cloudCreateNumber, cloudSaveCheck, cloudCreateCase, cloudUpdateCaseStatus, cloudDeleteCase, cloudUploadEvidence, cloudDeleteEvidence } from "./lib/cloud-data";
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, LogOut,
   CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, FileCheck2, FileSearch,
   Files, Globe, LayoutDashboard, LockKeyhole, MapPin, Menu, MessageSquareWarning,
   Navigation, Phone, Plus, Search, ShieldAlert, ShieldCheck, Smartphone, Trash2,
@@ -390,6 +390,14 @@ export default function App() {
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   }
 
+  if (supabaseConfigured && !authReady) return <LoadingScreen title="Memeriksa sesi akun" detail="Menghubungkan sesi autentikasi Supabase." />;
+  if (supabaseConfigured && authReady && !authUser) return <AuthGate
+    email={authEmail} setEmail={setAuthEmail} password={authPassword} setPassword={setAuthPassword}
+    mode={authMode} setMode={setAuthMode} busy={authBusy} error={authError} notice={authNotice}
+    onSubmit={submitAuth}
+  />;
+  if (supabaseConfigured && authUser && !store.loaded) return <LoadingScreen title="Memuat data kasus" detail="Mengambil catatan pribadi dari database." />;
+
   return <div className="app-shell">
     {sidebarOpen && <button className="mobile-scrim" aria-label="Tutup menu" onClick={() => setSidebarOpen(false)} />}
     <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
@@ -398,14 +406,14 @@ export default function App() {
       <nav className="nav-list" aria-label="Navigasi utama">{NAV.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${page === item.id ? "nav-active" : ""}`} onClick={() => navigate(item.id)}><Icon size={18}/><span>{item.label}</span>{item.id === "cases" && store.cases.length > 0 && <span className="nav-count">{store.cases.length}</span>}</button>; })}</nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-notice"><div className="notice-icon"><LockKeyhole size={16}/></div><strong>Privasi pertama</strong><p>Data pada versi awal tersimpan di browser ini. Belum ada sinkronisasi server.</p></div>
-      <div className="sidebar-bottom"><div className="avatar">LA</div><div className="user-info"><strong>Pengguna lokal</strong><span>Mode lokal · MVP</span></div><Pill tone="warning">Lokal</Pill></div>
+      <div className="sidebar-bottom"><div className="avatar">LA</div><div className="user-info"><strong>{authUser?.email || "Pengguna lokal"}</strong><span>{supabaseConfigured ? "Akun cloud" : "Mode lokal · MVP"}</span></div>{supabaseConfigured && authUser ? <IconButton title="Keluar dari akun" onClick={signOut}><LogOut size={16}/></IconButton> : <Pill tone="warning">Lokal</Pill>}</div>
       <div className="sidebar-version">LACAK AMAN <span>v0.1.0</span></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><div className="topbar-left"><IconButton title="Buka navigasi" className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={19}/></IconButton><div className="breadcrumb">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="topbar-right"><div className="connection-state"><span className="dot dot-amber"/><span>Data lokal</span></div><div className="topbar-divider"/><IconButton title="Informasi aplikasi" onClick={() => navigate("guide")}><CircleHelp size={18}/></IconButton><div className="top-avatar">LA</div></div></header>
+      <header className="topbar"><div className="topbar-left"><IconButton title="Buka navigasi" className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={19}/></IconButton><div className="breadcrumb">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="topbar-right"><div className="connection-state"><span className={supabaseConfigured ? "dot dot-green" : "dot dot-amber"}/><span>{supabaseConfigured ? "Akun cloud" : "Data lokal"}</span></div><div className="topbar-divider"/><IconButton title="Informasi aplikasi" onClick={() => navigate("guide")}><CircleHelp size={18}/></IconButton><div className="top-avatar">LA</div></div></header>
       <div className="page-wrap">
         {page === "dashboard" && <Dashboard cases={store.cases} numbers={store.numbers} activeCases={activeCases} reportedNumbers={reportedNumbers} onNavigate={navigate} onNewCase={() => setShowCaseForm(true)} onNewNumber={() => setShowNumberForm(true)} />}
-        {page === "numbers" && <NumbersPage numbers={filteredNumbers} allCount={store.numbers.length} search={search} setSearch={setSearch} onAdd={() => setShowNumberForm(true)} onSaveCheck={saveCheck} onDelete={id => { if (window.confirm("Hapus catatan nomor dari browser ini?")) store.setNumbers(prev => prev.filter(n => n.id !== id)); }} />}
+        {page === "numbers" && <NumbersPage numbers={filteredNumbers} allCount={store.numbers.length} search={search} setSearch={setSearch} onAdd={() => setShowNumberForm(true)} onSaveCheck={saveCheck} onDelete={deleteNumber} />}
         {page === "cases" && <CasesPage cases={filteredCases} allCount={store.cases.length} search={search} setSearch={setSearch} onAdd={() => setShowCaseForm(true)} onEvidence={addEvidence} onRemoveEvidence={removeEvidence} onStatus={setCaseStatus} onDelete={deleteCase} onExport={exportCase} />}
         {page === "map" && <MapPage consent={gpsConsent} setConsent={setGpsConsent} session={geoSession} error={geoError} busy={busyGps} onStart={startGps} onStop={() => { setGeoSession(null); setGpsConsent(false); setGeoError(""); notify("Sesi lokasi lokal dihentikan."); }} />}
         {page === "guide" && <GuidePage />}
