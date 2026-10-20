@@ -141,11 +141,74 @@ export default function App() {
   const [showNumberForm, setShowNumberForm] = useState(false);
   const [showCaseForm, setShowCaseForm] = useState(false);
   const [gpsConsent, setGpsConsent] = useState(false);
-  const store = useLocalStore();
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(!supabaseConfigured);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const store = useLocalStore(authUser?.id ?? null, supabaseConfigured);
   const [geoSession, setGeoSession] = useState<GeoSession>(null);
   const [geoError, setGeoError] = useState("");
   const [busyGps, setBusyGps] = useState(false);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3600); };
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    let mounted = true;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) setAuthError(error.message);
+      setAuthUser(data.session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setAuthUser(session?.user ?? null);
+      setAuthReady(true);
+      setAuthError("");
+    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthNotice("");
+    try {
+      const email = authEmail.trim().toLowerCase();
+      const result = authMode === "signin"
+        ? await supabase.auth.signInWithPassword({ email, password: authPassword })
+        : await supabase.auth.signUp({ email, password: authPassword });
+      if (result.error) throw result.error;
+      if (authMode === "signup" && !result.data.session) {
+        setAuthNotice("Akun dibuat. Periksa email untuk konfirmasi, lalu masuk.");
+      } else {
+        setAuthNotice("");
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Autentikasi gagal. Periksa konfigurasi Supabase.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) notify("Gagal keluar: " + error.message);
+    else notify("Anda sudah keluar dari akun.");
+  }
   const pageTitle = NAV.find(n => n.id === page)?.label ?? "Ringkasan";
   const filteredNumbers = useMemo(() => store.numbers.filter(n => (n.phone + " " + n.label + " " + n.status).toLowerCase().includes(search.toLowerCase())), [store.numbers, search]);
   const filteredCases = useMemo(() => store.cases.filter(c => (c.title + " " + c.kind + " " + c.phone + " " + c.status).toLowerCase().includes(search.toLowerCase())), [store.cases, search]);
