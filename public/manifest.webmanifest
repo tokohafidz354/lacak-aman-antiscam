@@ -3,8 +3,9 @@
   "short_name": "Lacak Aman",
   "lang": "id-ID",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f4f7fb",
   "theme_color": "#0b1730",
-  "description": "Pemeriksaan awal nomor mencurigakan, manajemen bukti, dan berbagi lokasi GPS berizin."
+  "description": "Pemeriksaan awal nomor mencurigakan, manajemen bukti, dan pembacaan GPS berizin."
 }
