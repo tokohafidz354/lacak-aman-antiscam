@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import type { User } from "@supabase/supabase-js";
+import { supabase, supabaseConfigured } from "./lib/supabase";
+import { loadCloudData, cloudCreateNumber, cloudSaveCheck, cloudCreateCase, cloudUpdateCaseStatus, cloudDeleteCase, cloudUploadEvidence, cloudDeleteEvidence } from "./lib/cloud-data";
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen,
   CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, FileCheck2, FileSearch,
@@ -10,7 +13,7 @@ import {
 type Page = "dashboard" | "numbers" | "cases" | "map" | "guide";
 type CheckStatus = "Belum diperiksa" | "Ada laporan" | "Belum ditemukan pada sumber yang diperiksa" | "Gagal diperiksa";
 type NumberRecord = { id: string; phone: string; label: string; status: CheckStatus; checkedAt?: string; source?: string; note?: string };
-type Evidence = { id: string; name: string; size: number; type: string; hash: string; addedAt: string; url: string };
+type Evidence = { id: string; name: string; size: number; type: string; hash: string; addedAt: string; url: string; storagePath?: string };
 type CaseRecord = { id: string; title: string; kind: string; status: "Baru" | "Ditinjau" | "Dilaporkan" | "Selesai"; date: string; summary: string; phone: string; evidence: Evidence[] };
 type GeoPoint = { latitude: number; longitude: number; accuracy: number; capturedAt: string };
 type GeoSession = { point: GeoPoint; expiresAt: string } | null;
