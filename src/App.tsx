@@ -464,3 +464,38 @@ function Modal({title,subtitle,onClose,children}: {title:string;subtitle:string;
  useEffect(()=>{const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose();};window.addEventListener("keydown",onKey);return ()=>window.removeEventListener("keydown",onKey);},[onClose]);
  return <div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="modal-head"><div><h2>{title}</h2><p>{subtitle}</p></div><IconButton title="Tutup dialog" onClick={onClose}><X size={18}/></IconButton></div>{children}</section></div>;
 }
+
+function LoadingScreen({ title, detail }: { title: string; detail: string }) {
+  return <main className="auth-screen"><section className="auth-card"><div className="brand-mark auth-mark"><ShieldCheck size={24}/></div><h1>{title}</h1><p>{detail}</p><div className="auth-loading"><Activity size={18}/> Memuat, mohon tunggu…</div></section></main>;
+}
+
+function AuthGate({ email, setEmail, password, setPassword, mode, setMode, busy, error, notice, onSubmit }: {
+  email: string;
+  setEmail: (value: string) => void;
+  password: string;
+  setPassword: (value: string) => void;
+  mode: "signin" | "signup";
+  setMode: (value: "signin" | "signup") => void;
+  busy: boolean;
+  error: string;
+  notice: string;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return <main className="auth-screen">
+    <section className="auth-card">
+      <div className="auth-brand"><div className="brand-mark auth-mark"><ShieldCheck size={24}/></div><div><div className="brand-name auth-brand-name">lacak<span>aman</span></div><div className="brand-sub auth-brand-sub">ANTI-SCAM WORKSPACE</div></div></div>
+      <div className="eyebrow auth-eyebrow">AKSES PRIBADI</div>
+      <h1>{mode === "signin" ? "Masuk ke Lacak Aman" : "Buat akun Lacak Aman"}</h1>
+      <p className="auth-description">Data kasus dan bukti pribadi berada di akun Anda. Masuk atau buat akun untuk melanjutkan ke workspace cloud.</p>
+      <form className="auth-form" onSubmit={onSubmit}>
+        <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" placeholder="nama@email.com" required /></label>
+        <label>Kata sandi<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={8} placeholder="Minimal 8 karakter" required /></label>
+        {error && <div className="auth-error" role="alert"><AlertTriangle size={16}/><span>{error}</span></div>}
+        {notice && <div className="auth-notice" role="status"><CheckCircle2 size={16}/><span>{notice}</span></div>}
+        <Button type="submit" disabled={busy} className="auth-submit">{busy ? <><Activity size={16}/> Memproses...</> : mode === "signin" ? "Masuk" : "Buat akun"}</Button>
+      </form>
+      <button className="auth-switch" type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); }}>{mode === "signin" ? "Belum punya akun? Buat akun" : "Sudah punya akun? Masuk"}</button>
+      <div className="auth-privacy"><LockKeyhole size={15}/><span>Autentikasi menggunakan Supabase. Jangan gunakan kata sandi yang sama dengan akun lain. Tim Lacak Aman tidak akan meminta OTP atau kata sandi.</span></div>
+    </section>
+  </main>;
+}
