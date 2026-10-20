@@ -216,27 +216,50 @@ export default function App() {
   const reportedNumbers = store.numbers.filter(n => n.status === "Ada laporan").length;
 
   function navigate(next: Page) { setPage(next); setSidebarOpen(false); setSearch(""); }
-  function saveNumber(event: FormEvent<HTMLFormElement>) {
+  async function saveNumber(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const phone = normalizePhone(String(form.get("phone") ?? ""));
     const label = safeText(String(form.get("label") ?? ""), 80);
     if (!validIndonesianPhone(phone)) { notify("Format nomor belum valid. Masukkan nomor seluler Indonesia yang benar."); return; }
     if (store.numbers.some(n => n.phone === phone)) { notify("Nomor ini sudah tercatat. Buka datanya untuk menambah pemeriksaan."); return; }
-    store.setNumbers(prev => [{ id: nowId(), phone, label: label || "Nomor belum diberi label", status: "Belum diperiksa" }, ...prev]);
+    const finalLabel = label || "Nomor belum diberi label";
+    if (supabaseConfigured) {
+      if (!authUser || !supabase) { notify("Masuk ke akun terlebih dahulu."); return; }
+      try {
+        const data = await cloudCreateNumber(authUser.id, phone, finalLabel);
+        store.setNumbers(prev => [{ id: data.id, phone: data.phone_e164, label: data.label, status: "Belum diperiksa" }, ...prev]);
+      } catch (error) {
+        notify("Nomor gagal disimpan: " + (error instanceof Error ? error.message : "periksa koneksi dan kebijakan RLS."));
+        return;
+      }
+    } else {
+      store.setNumbers(prev => [{ id: nowId(), phone, label: finalLabel, status: "Belum diperiksa" }, ...prev]);
+    }
     setShowNumberForm(false);
-    notify("Nomor ditambahkan. Periksa sumber resmi lalu catat hasilnya.");
+    notify(supabaseConfigured ? "Nomor berhasil disimpan di Supabase." : "Nomor disimpan di browser ini.");
   }
-  function saveCheck(event: FormEvent<HTMLFormElement>, record: NumberRecord) {
+
+  async function saveCheck(event: FormEvent<HTMLFormElement>, record: NumberRecord) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const source = String(form.get("source") ?? "");
     const status = String(form.get("status") ?? "Belum diperiksa") as CheckStatus;
     const note = safeText(String(form.get("note") ?? ""));
+    if (supabaseConfigured) {
+      if (!authUser || !supabase) { notify("Masuk ke akun terlebih dahulu."); return; }
+      try {
+        await cloudSaveCheck(authUser.id, record.id, source, SOURCES.find(item => item.name === source)?.url ?? "", status, note);
+      } catch (error) {
+        notify("Hasil pemeriksaan gagal disimpan: " + (error instanceof Error ? error.message : "periksa database."));
+        return;
+      }
+    }
     store.setNumbers(prev => prev.map(n => n.id === record.id ? { ...n, source, status, note, checkedAt: new Date().toISOString() } : n));
-    notify("Catatan pemeriksaan disimpan di browser ini.");
+    notify(supabaseConfigured ? "Hasil pemeriksaan disimpan di Supabase." : "Catatan pemeriksaan disimpan di browser ini.");
   }
-  function saveCase(event: FormEvent<HTMLFormElement>) {
+
+  async function saveCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const title = safeText(String(form.get("title") ?? ""), 120);
@@ -244,32 +267,108 @@ export default function App() {
     const phone = phoneRaw ? normalizePhone(phoneRaw) : "";
     if (!title) { notify("Judul kasus wajib diisi."); return; }
     if (phone && !validIndonesianPhone(phone)) { notify("Nomor terkait belum dalam format yang valid."); return; }
-    const record: CaseRecord = { id: nowId(), title, kind: String(form.get("kind") ?? "Penipuan online"), status: "Baru", date: String(form.get("date") || new Date().toISOString().slice(0, 10)), summary: safeText(String(form.get("summary") ?? "")), phone, evidence: [] };
+    const kind = String(form.get("kind") ?? "Penipuan online");
+    const date = String(form.get("date") || new Date().toISOString().slice(0, 10));
+    const summary = safeText(String(form.get("summary") ?? ""));
+    let record: CaseRecord = { id: nowId(), title, kind, status: "Baru", date, summary, phone, evidence: [] };
+
+    if (supabaseConfigured) {
+      if (!authUser || !supabase) { notify("Masuk ke akun terlebih dahulu."); return; }
+      try {
+        record = await cloudCreateCase(authUser.id, { title, incident_type: kind, status: "Baru", incident_date: date, summary, phone }) as CaseRecord;
+      } catch (error) {
+        notify("Kasus gagal disimpan: " + (error instanceof Error ? error.message : "periksa koneksi dan kebijakan RLS."));
+        return;
+      }
+    } else if (phone && !store.numbers.some(n => n.phone === phone)) {
+      store.setNumbers(prev => [{ id: nowId(), phone, label: "Terkait kasus: " + title, status: "Belum diperiksa" }, ...prev]);
+    }
+
     store.setCases(prev => [record, ...prev]);
-    if (phone && !store.numbers.some(n => n.phone === phone)) store.setNumbers(prev => [{ id: nowId(), phone, label: "Terkait kasus: " + title, status: "Belum diperiksa" }, ...prev]);
     setShowCaseForm(false);
-    notify("Kasus disimpan di penyimpanan lokal browser.");
+    notify(supabaseConfigured ? "Kasus berhasil disimpan di Supabase." : "Kasus disimpan di penyimpanan lokal browser.");
   }
+
   async function addEvidence(caseId: string, file?: File) {
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain"].includes(file.type)) { notify("Jenis file tidak didukung. Gunakan PNG, JPG, WEBP, PDF, atau TXT."); return; }
     if (file.size > 8 * 1024 * 1024) { notify("Ukuran file maksimum 8 MB."); return; }
     let hash = "Hash tidak tersedia";
-    try { const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer()); hash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join(""); } catch { /* optional */ }
-    const item: Evidence = { id: nowId(), name: file.name, size: file.size, type: file.type, hash, addedAt: new Date().toISOString(), url: URL.createObjectURL(file) };
+    try {
+      const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+      hash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+    } catch { /* Hash is optional if Web Crypto is unavailable. */ }
+
+    let item: Evidence;
+    if (supabaseConfigured) {
+      if (!authUser || !supabase) { notify("Masuk ke akun terlebih dahulu."); return; }
+      try {
+        item = await cloudUploadEvidence(authUser.id, caseId, file, hash) as Evidence;
+      } catch (error) {
+        notify("Bukti gagal diunggah: " + (error instanceof Error ? error.message : "periksa storage privat dan kebijakan RLS."));
+        return;
+      }
+    } else {
+      item = { id: nowId(), name: file.name, size: file.size, type: file.type, hash, addedAt: new Date().toISOString(), url: URL.createObjectURL(file) };
+    }
     store.setCases(prev => prev.map(c => c.id === caseId ? { ...c, evidence: [...c.evidence, item] } : c));
-    notify("Bukti ditambahkan untuk sesi browser ini. File belum diunggah ke server.");
+    notify(supabaseConfigured ? "Bukti berhasil diunggah ke private Storage." : "Bukti ditambahkan untuk sesi browser ini. File belum diunggah ke server.");
   }
-  function removeEvidence(caseId: string, evidenceId: string) {
+
+  async function removeEvidence(caseId: string, evidenceId: string) {
+    const found = store.cases.find(c => c.id === caseId)?.evidence.find(e => e.id === evidenceId);
+    if (!found) return;
+    if (supabaseConfigured) {
+      try {
+        await cloudDeleteEvidence(evidenceId, found.storagePath);
+      } catch (error) {
+        notify("Bukti gagal dihapus dari server: " + (error instanceof Error ? error.message : "periksa izin storage."));
+        return;
+      }
+    } else if (found.url.startsWith("blob:")) {
+      URL.revokeObjectURL(found.url);
+    }
     store.setCases(prev => prev.map(c => c.id === caseId ? { ...c, evidence: c.evidence.filter(e => e.id !== evidenceId) } : c));
-    notify("Referensi bukti dihapus dari daftar kasus lokal.");
+    notify(supabaseConfigured ? "Bukti dihapus dari Storage dan metadata." : "Referensi bukti dihapus dari daftar kasus lokal.");
   }
-  function setCaseStatus(caseId: string, status: CaseRecord["status"]) { store.setCases(prev => prev.map(c => c.id === caseId ? { ...c, status } : c)); }
-  function deleteCase(id: string) {
-    if (!window.confirm("Hapus kasus dan metadata bukti dari browser ini? Tindakan ini tidak dapat dibatalkan.")) return;
+
+  async function setCaseStatus(caseId: string, status: CaseRecord["status"]) {
+    if (supabaseConfigured) {
+      try {
+        await cloudUpdateCaseStatus(caseId, status);
+      } catch (error) {
+        notify("Status kasus gagal diperbarui: " + (error instanceof Error ? error.message : "periksa database."));
+        return;
+      }
+    }
+    store.setCases(prev => prev.map(c => c.id === caseId ? { ...c, status } : c));
+  }
+
+  async function deleteCase(id: string) {
+    if (!window.confirm("Hapus kasus dan metadata bukti? Tindakan ini tidak dapat dibatalkan.")) return;
+    if (supabaseConfigured) {
+      try {
+        await cloudDeleteCase(id);
+      } catch (error) {
+        notify("Kasus gagal dihapus: " + (error instanceof Error ? error.message : "periksa Storage dan RLS."));
+        return;
+      }
+    }
     store.setCases(prev => prev.filter(c => c.id !== id));
-    notify("Kasus dihapus dari penyimpanan lokal.");
+    notify(supabaseConfigured ? "Kasus dan file terkait dihapus dari Supabase." : "Kasus dihapus dari penyimpanan lokal.");
   }
+
+  async function deleteNumber(id: string) {
+    if (!window.confirm("Hapus catatan nomor dari daftar?")) return;
+    if (supabaseConfigured) {
+      if (!supabase) return;
+      const { error } = await supabase.from("phone_subjects").delete().eq("id", id);
+      if (error) { notify("Nomor gagal dihapus: " + error.message); return; }
+    }
+    store.setNumbers(prev => prev.filter(n => n.id !== id));
+    notify("Catatan nomor dihapus.");
+  }
+
   function exportCase(record: CaseRecord) {
     const evidenceText = record.evidence.map((e, i) => `${i + 1}. ${e.name} | ${prettySize(e.size)} | SHA-256: ${e.hash} | ditambahkan: ${dateTime(e.addedAt)}`).join("\\n") || "Belum ada lampiran.";
     const content = `LAPORAN KASUS — LACAK AMAN\\n\\nID Kasus: ${record.id}\\nJudul: ${record.title}\\nJenis: ${record.kind}\\nStatus: ${record.status}\\nTanggal kejadian: ${record.date}\\nNomor terkait: ${record.phone || "Tidak dicatat"}\\n\\nKRONOLOGI / RINGKASAN\\n${record.summary || "Belum ada kronologi."}\\n\\nBUKTI DIGITAL\\n${evidenceText}\\n\\nCATATAN: Dokumen ini dibuat dari catatan lokal pengguna. Hash membantu memeriksa perubahan file, bukan jaminan keabsahan hukum. Status laporan bukan penetapan bahwa pihak tertentu bersalah.\\nDibuat: ${dateTime(new Date().toISOString())}\\n`;
