@@ -45,27 +45,69 @@ function normalizePhone(raw: string) {
 function validIndonesianPhone(value: string) { return /^\+628[1-9][0-9]{6,11}$/.test(value); }
 function safeText(value: string, max = 4000) { return value.trim().slice(0, max); }
 
-function useLocalStore() {
+function useLocalStore(userId: string | null, cloudEnabled: boolean) {
   const [numbers, setNumbers] = useState<NumberRecord[]>([]);
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { numbers?: NumberRecord[]; cases?: CaseRecord[] };
-        setNumbers(Array.isArray(parsed.numbers) ? parsed.numbers : []);
-        setCases(Array.isArray(parsed.cases) ? parsed.cases : []);
+    let cancelled = false;
+
+    async function loadCloud() {
+      if (!cloudEnabled) return;
+      if (!supabase || !userId) {
+        setNumbers([]);
+        setCases([]);
+        setLoadError("");
+        setLoaded(true);
+        return;
       }
-    } catch { /* Invalid local data is ignored. */ }
-    setLoaded(true);
-  }, []);
-  useEffect(() => {
-    if (loaded) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ numbers, cases })); } catch { /* Storage may be unavailable. */ }
+
+      setLoaded(false);
+      setLoadError("");
+      try {
+        const data = await loadCloudData();
+        if (!cancelled) {
+          setNumbers(data.numbers as NumberRecord[]);
+          setCases(data.cases as CaseRecord[]);
+        }
+      } catch (error) {
+        console.error("Lacak Aman cloud load failed:", error);
+        if (!cancelled) setLoadError("Data cloud tidak dapat dimuat. Periksa migrasi database, Storage privat, dan kebijakan RLS.");
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
     }
-  }, [numbers, cases, loaded]);
-  return { numbers, setNumbers, cases, setCases };
+
+    if (cloudEnabled) {
+      void loadCloud();
+    } else {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { numbers?: NumberRecord[]; cases?: CaseRecord[] };
+          setNumbers(Array.isArray(parsed.numbers) ? parsed.numbers : []);
+          setCases(Array.isArray(parsed.cases) ? parsed.cases : []);
+        }
+      } catch {
+        /* Invalid local data is ignored. */
+      }
+      setLoadError("");
+      setLoaded(true);
+    }
+
+    return () => { cancelled = true; };
+  }, [cloudEnabled, userId]);
+
+  useEffect(() => {
+    if (loaded && !cloudEnabled) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ numbers, cases })); }
+      catch { /* Browser storage may be unavailable. */ }
+    }
+  }, [numbers, cases, loaded, cloudEnabled]);
+
+  return { numbers, setNumbers, cases, setCases, loaded, loadError };
 }
 
 function IconButton({ children, onClick, title, className = "" }: { children: ReactNode; onClick?: () => void; title: string; className?: string }) {
